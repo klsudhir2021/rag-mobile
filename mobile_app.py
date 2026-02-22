@@ -7,13 +7,6 @@ Mobile-first Voice RAG Assistant (PWA-ready)
   🧠 RAG        → ChromaDB + LLaMA 3.3 via Groq
   🔊 TTS output → gTTS (text-to-speech)
   📲 PWA        → installable on phone home screen
-
-Run locally:
-    streamlit run mobile_app.py
-
-Deploy (Streamlit Cloud):
-    Push to GitHub → share.streamlit.io
-    Add secret: GROQ_API_KEY = "gsk_..."
 """
 
 import os
@@ -23,7 +16,7 @@ import base64
 from pathlib import Path
 
 import streamlit as st
-from audiorecorder import audiorecorder
+from streamlit_mic_recorder import mic_recorder   # replaces streamlit-audiorecorder
 from groq import Groq
 from gtts import gTTS
 
@@ -36,11 +29,11 @@ from rag_engine import build_chain, load_retriever, check_ready
 st.set_page_config(
     page_title="RAG Assistant",
     page_icon="🎤",
-    layout="centered",          # centered = better on mobile
-    initial_sidebar_state="collapsed",  # sidebar hidden by default on mobile
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
-# ─── PWA + Mobile CSS injection ───────────────────────────────────────────────
+# ─── PWA + Mobile CSS ─────────────────────────────────────────────────────────
 
 st.markdown("""
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
@@ -51,19 +44,12 @@ st.markdown("""
 <meta name="theme-color" content="#0F0F1A">
 
 <style>
-/* ── Global mobile resets ── */
 * { box-sizing: border-box; }
-
-/* Hide Streamlit branding on mobile */
 #MainMenu, footer, header { visibility: hidden; }
-
-/* Full-width containers on mobile */
 .block-container {
     padding: 0.5rem 1rem 5rem 1rem !important;
     max-width: 100% !important;
 }
-
-/* ── Chat bubbles ── */
 .user-bubble {
     background: linear-gradient(135deg, #6C63FF, #4ECDC4);
     color: white;
@@ -75,7 +61,6 @@ st.markdown("""
     box-shadow: 0 2px 8px rgba(108,99,255,0.3);
     word-wrap: break-word;
 }
-
 .bot-bubble {
     background: #1A1A2E;
     color: #EAEAEA;
@@ -87,7 +72,6 @@ st.markdown("""
     border: 1px solid #2A2A4A;
     word-wrap: break-word;
 }
-
 .source-tag {
     font-size: 11px;
     color: #888;
@@ -97,16 +81,6 @@ st.markdown("""
     border-radius: 10px;
     display: inline-block;
 }
-
-/* ── Big mic button ── */
-.mic-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px 0;
-}
-
-/* ── Status banner ── */
 .status-bar {
     background: linear-gradient(135deg, #6C63FF22, #4ECDC422);
     border: 1px solid #6C63FF44;
@@ -117,20 +91,6 @@ st.markdown("""
     color: #aaa;
     text-align: center;
 }
-
-/* ── Input area fixed at bottom ── */
-.stChatInputContainer {
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    z-index: 999 !important;
-    background: #0F0F1A !important;
-    padding: 8px 12px !important;
-    border-top: 1px solid #2A2A4A !important;
-}
-
-/* ── Buttons ── */
 .stButton > button {
     border-radius: 50px !important;
     font-weight: 600 !important;
@@ -138,17 +98,10 @@ st.markdown("""
     width: 100% !important;
     font-size: 15px !important;
 }
-
-/* ── Tabs ── */
 .stTabs [data-baseweb="tab"] {
     font-size: 14px !important;
     padding: 8px 16px !important;
 }
-
-/* ── Spinner ── */
-.stSpinner { text-align: center; }
-
-/* ── Sidebar mobile ── */
 [data-testid="stSidebar"] {
     width: 85vw !important;
     max-width: 320px !important;
@@ -172,6 +125,7 @@ for k, v in {
     "store_loaded": False,
     "tts_lang":     "en",
     "auto_speak":   True,
+    "last_audio_id": None,
 }.items():
     if k not in st.session_state:
         st.session_state[k] = v
@@ -186,6 +140,7 @@ def load_rag_system():
 
 
 def transcribe_audio(audio_bytes: bytes) -> str:
+    """Transcribe audio using Groq Whisper."""
     client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp.write(audio_bytes)
@@ -203,6 +158,7 @@ def transcribe_audio(audio_bytes: bytes) -> str:
 
 
 def text_to_speech(text: str, lang: str = "en") -> bytes:
+    """Convert text to MP3 audio bytes."""
     clean = (text
         .replace("**", "").replace("*", "")
         .replace("#", "").replace("`", "")
@@ -217,6 +173,7 @@ def text_to_speech(text: str, lang: str = "en") -> bytes:
 
 
 def autoplay_audio(audio_bytes: bytes):
+    """Auto-play audio in browser."""
     b64 = base64.b64encode(audio_bytes).decode()
     st.markdown(
         f'<audio autoplay style="display:none">'
@@ -248,7 +205,6 @@ def is_cloud():
 
 
 def render_chat_bubble(role: str, content: str, sources: list = None):
-    """Render a styled chat bubble."""
     if role == "user":
         st.markdown(f'<div class="user-bubble">🧑 {content}</div>', unsafe_allow_html=True)
     else:
@@ -262,12 +218,11 @@ def render_chat_bubble(role: str, content: str, sources: list = None):
         )
 
 
-# ─── Sidebar (Settings) ───────────────────────────────────────────────────────
+# ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 with st.sidebar:
     st.markdown("## ⚙️ Settings")
 
-    # API Key
     if not is_cloud():
         st.markdown("#### 🔑 Groq API Key")
         st.caption("Free at [console.groq.com](https://console.groq.com)")
@@ -284,8 +239,6 @@ with st.sidebar:
         st.success("🔑 Key loaded")
 
     st.divider()
-
-    # Voice settings
     st.markdown("#### 🔊 Voice")
     st.session_state.tts_lang = st.selectbox(
         "Language",
@@ -301,8 +254,6 @@ with st.sidebar:
     st.session_state.auto_speak = st.toggle("Auto-play answers 🔊", value=True)
 
     st.divider()
-
-    # Documents
     st.markdown("#### 📂 Documents")
     uploaded = st.file_uploader(
         "Upload", type=["pdf", "txt", "docx", "md"],
@@ -349,16 +300,14 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("""
-    ---
-    📲 **Install as App:**
-    - **Android:** tap ⋮ → *Add to Home Screen*
-    - **iPhone:** tap Share → *Add to Home Screen*
-    """)
-
+---
+📲 **Install as App:**
+- **Android:** tap ⋮ → *Add to Home Screen*
+- **iPhone:** tap Share → *Add to Home Screen*
+""")
 
 # ─── Main UI ──────────────────────────────────────────────────────────────────
 
-# Header
 st.markdown("""
 <div style="text-align:center; padding: 10px 0 5px 0;">
     <h2 style="margin:0; font-size:22px;">🎤 RAG Assistant</h2>
@@ -370,7 +319,7 @@ st.markdown("""
 
 # API key check
 if not os.environ.get("GROQ_API_KEY", "").strip():
-    st.warning("🔑 Open sidebar (top-left ☰) → enter your Groq API key")
+    st.warning("🔑 Open sidebar (☰) → enter your Groq API key")
     st.stop()
 
 # Load RAG system
@@ -388,22 +337,22 @@ if not st.session_state.store_loaded:
         st.warning(msg)
         st.stop()
 
-# ── Tabs: Voice | Chat ────────────────────────────────────────────────────────
+# ── Tabs ──────────────────────────────────────────────────────────────────────
 
 tab_voice, tab_chat = st.tabs(["🎤 Voice", "💬 Chat History"])
 
 with tab_voice:
 
-    st.markdown('<div class="mic-container">', unsafe_allow_html=True)
-    st.markdown("**Hold to record your question:**")
+    st.markdown("**🎤 Tap the mic and speak your question:**")
 
-    audio = audiorecorder(
-        start_prompt="⏺  Tap to Record",
-        stop_prompt="⏹  Tap to Stop",
-        pause_prompt="",
+    # ── mic_recorder replaces audiorecorder — works on Python 3.13 ────────────
+    audio = mic_recorder(
+        start_prompt="⏺ Tap to Record",
+        stop_prompt="⏹ Tap to Stop",
+        just_once=True,          # returns audio only once per recording
+        use_container_width=True,
         key="mic",
     )
-    st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("**Or type your question:**")
     col_input, col_btn = st.columns([4, 1])
@@ -417,23 +366,27 @@ with tab_voice:
 
     question = None
 
-    # Process voice
-    if len(audio) > 0:
-        with st.spinner("🎙️ Transcribing …"):
-            try:
-                question = transcribe_audio(audio.export().read())
-                st.markdown(
-                    f'<div class="status-bar">📝 Heard: <strong>{question}</strong></div>',
-                    unsafe_allow_html=True,
-                )
-            except Exception as e:
-                st.error(f"Mic error: {e}")
+    # Process voice — mic_recorder returns a dict with 'bytes' key
+    if audio and audio.get("bytes"):
+        # Avoid re-processing the same recording on reruns
+        audio_id = audio.get("id", 0)
+        if audio_id != st.session_state.last_audio_id:
+            st.session_state.last_audio_id = audio_id
+            with st.spinner("🎙️ Transcribing …"):
+                try:
+                    question = transcribe_audio(audio["bytes"])
+                    st.markdown(
+                        f'<div class="status-bar">📝 Heard: <strong>{question}</strong></div>',
+                        unsafe_allow_html=True,
+                    )
+                except Exception as e:
+                    st.error(f"Mic error: {e}")
 
     # Process text
     elif ask and typed.strip():
         question = typed.strip()
 
-    # Answer
+    # Generate answer
     if question:
         render_chat_bubble("user", question)
         st.session_state.messages.append({"role": "user", "content": question})
@@ -442,7 +395,6 @@ with tab_voice:
             source_docs = st.session_state.retriever.invoke(question)
             answer      = st.session_state.chain.invoke(question)
 
-        # Collect sources
         sources = []
         for doc in source_docs:
             src   = doc.metadata.get("source", "unknown")
@@ -474,8 +426,4 @@ with tab_chat:
         )
     else:
         for msg in st.session_state.messages:
-            render_chat_bubble(
-                msg["role"],
-                msg["content"],
-                msg.get("sources"),
-            )
+            render_chat_bubble(msg["role"], msg["content"], msg.get("sources"))

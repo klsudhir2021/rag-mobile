@@ -16,9 +16,10 @@ pypdf==5.1.0
 docx2txt==0.8
 unstructured==0.16.23
 
-# ─── Voice ────────────────────────────────────────────────────────────────────
-streamlit-audiorecorder==0.0.5
-pydub==0.25.1
+# ─── Voice Input (Python 3.13 compatible — replaces streamlit-audiorecorder) ──
+streamlit-mic-recorder==0.0.9
+
+# ─── Voice Output ─────────────────────────────────────────────────────────────
 gTTS==2.5.3
 
 # ─── UI ───────────────────────────────────────────────────────────────────────
