@@ -16,9 +16,9 @@ from langchain_community.document_loaders import (
     PyPDFLoader,
     TextLoader,
     Docx2txtLoader,
-    UnstructuredMarkdownLoader,
 )
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document as _Doc  # noqa: F401
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -32,7 +32,7 @@ LOADER_MAP = {
     ".pdf":  PyPDFLoader,
     ".txt":  TextLoader,
     ".docx": Docx2txtLoader,
-    ".md":   UnstructuredMarkdownLoader,
+    ".md":   TextLoader,       # Use TextLoader for markdown — no extra deps needed
 }
 
 
