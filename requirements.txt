@@ -1,27 +1,25 @@
 # ─── LangChain ────────────────────────────────────────────────────────────────
-langchain==0.3.14
-langchain-core==0.3.33
-langchain-community==0.3.14
-langchain-groq==0.2.4
-langchain-huggingface==0.1.2
-langchain-chroma==0.2.1
+langchain
+langchain-core
+langchain-community
+langchain-groq
+langchain-huggingface
+langchain-chroma
 
 # ─── AI & Embeddings ──────────────────────────────────────────────────────────
-groq==0.13.1
-sentence-transformers==3.4.1
-chromadb==0.6.3
+groq
+sentence-transformers
+chromadb
 
 # ─── Document Loaders ─────────────────────────────────────────────────────────
-pypdf==5.1.0
-docx2txt==0.8
-unstructured==0.16.23
+pypdf
+docx2txt
 
-# ─── Voice Input (Python 3.13 compatible — replaces streamlit-audiorecorder) ──
-streamlit-mic-recorder==0.0.9
+# ─── Voice Input (Python 3.13 compatible) ─────────────────────────────────────
+streamlit-mic-recorder
 
 # ─── Voice Output ─────────────────────────────────────────────────────────────
-gTTS==2.5.3
+gTTS
 
-# ─── UI ───────────────────────────────────────────────────────────────────────
-streamlit==1.42.0
-python-dotenv==1.0.1
+# ─── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv
